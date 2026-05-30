@@ -8,56 +8,46 @@
 #    (0.5, 0.5), (0.2, 0.2), (0.1, 0.1), (0.1, 0.05), (0.3, 0.2)
 #
 
-# importacion de librerias
-import pandas as pd
+import os
+import sys
+
+# Agregar la carpeta raiz al path para poder importar src
+script_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(script_dir)
+sys.path.insert(0, root_dir)
+
 from sklearn.linear_model import ElasticNet
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
 
-# descarga de datos
-url = "http://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv"
-df = pd.read_csv(url, sep=";")
+from src.data_utils import load_wine_data
+from src.trainer import save_model, train_and_evaluate
 
-# preparacion de datos
-y = df["quality"]
-x = df.copy()
-x.pop("quality")
+# Cargar datos
+x_train, x_test, y_train, y_test = load_wine_data()
 
-# dividir los datos en entrenamiento y testing
-(x_train, x_test, y_train, y_test) = train_test_split(
-    x,
-    y,
-    test_size=0.25,
-    random_state=123456,
-)
+# Lista de hiperparametros a probar
+param_grid = [
+    (0.5, 0.5),
+    (0.2, 0.2),
+    (0.1, 0.1),
+    (0.1, 0.05),
+    (0.3, 0.2),
+]
 
-# entrenar el modelo
-estimator = ElasticNet(alpha=0.5, l1_ratio=0.5, random_state=12345)
-estimator.fit(x_train, y_train)
+best_model = None
+best_r2 = -float("inf")
 
-print()
-print(estimator, ":", sep="")
+for alpha, l1_ratio in param_grid:
+    print(f"\nProbando: alpha={alpha}, l1_ratio={l1_ratio}")
 
-# Metricas de error durante entrenamiento
-y_pred = estimator.predict(x_train)
-mse = mean_squared_error(y_train, y_pred)
-mae = mean_absolute_error(y_train, y_pred)
-r2 = r2_score(y_train, y_pred)
+    estimator = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, random_state=12345)
+    estimator = train_and_evaluate(estimator, x_train, x_test, y_train, y_test)
 
-print()
-print("Metricas de entrenamiento:")
-print(f"  MSE: {mse}")
-print(f"  MAE: {mae}")
-print(f"  R2: {r2}")
+    # Evaluar en test para comparar
+    r2_test = estimator.score(x_test, y_test)
 
-# Metricas de error durante testing
-print()
-print("Metricas de testing:")
-y_pred = estimator.predict(x_test)
-mse = mean_squared_error(y_test, y_pred)
-mae = mean_absolute_error(y_test, y_pred)
-r2 = r2_score(y_test, y_pred)
+    if r2_test > best_r2:
+        best_r2 = r2_test
+        best_model = estimator
 
-print(f"  MSE: {mse}")
-print(f"  MAE: {mae}")
-print(f"  R2: {r2}")
+# Guardar el mejor modelo
+save_model(best_model, "models/estimator.pkl")
